@@ -108,7 +108,6 @@
   "regions": ["fra1"],
   "cleanUrls": true,
   "trailingSlash": false,
-  "outputFileTracing": true,
   "experimental": {
     "outputStandalone": true,
     "turbotrace": {
