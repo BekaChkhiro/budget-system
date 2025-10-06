@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import Link from 'next/link'
 import {
   Table,
@@ -70,7 +70,9 @@ export function ProjectsTable({ projects, pagination, currentFilters }: Projects
                 />
               ))}
             </div>
-            <ProjectsPagination pagination={pagination} />
+            <Suspense fallback={<div className="h-16 bg-white rounded-lg animate-pulse" />}>
+              <ProjectsPagination pagination={pagination} />
+            </Suspense>
           </>
         )}
 
@@ -133,7 +135,9 @@ export function ProjectsTable({ projects, pagination, currentFilters }: Projects
       </div>
 
       {projects.length > 0 && (
-        <ProjectsPagination pagination={pagination} />
+        <Suspense fallback={<div className="h-16 bg-white rounded-lg animate-pulse" />}>
+          <ProjectsPagination pagination={pagination} />
+        </Suspense>
       )}
 
       {editingProject && (

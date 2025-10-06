@@ -145,7 +145,9 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
       <ProjectsHeader />
 
       {/* Filters */}
-      <ProjectFilters />
+      <Suspense fallback={<div className="h-40 bg-white rounded-lg shadow-sm border animate-pulse" />}>
+        <ProjectFilters />
+      </Suspense>
 
       {/* Error State */}
       {error && (
