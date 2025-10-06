@@ -12,22 +12,24 @@ export const projectFormSchema = z.object({
     .min(3, 'პროექტის სახელი მინიმუმ 3 სიმბოლო უნდა იყოს')
     .max(255, 'პროექტის სახელი მაქსიმუმ 255 სიმბოლო უნდა იყოს')
     .trim(),
-  
+
   total_budget: z.number()
     .positive('ბიუჯეტი დადებითი რიცხვი უნდა იყოს')
     .multipleOf(0.01, 'მაქსიმუმ 2 ათწილადი ციფრი დასაშვებია')
     .max(999999999.99, 'ბიუჯეტი ძალიან დიდია'),
-  
+
   payment_type: z.enum(['single', 'installment'], {
     message: 'აირჩიეთ გადახდის ტიპი'
   }),
-  
+
+  team_member_ids: z.array(z.string().uuid()).optional(),
+
   installments: z.array(
     z.object({
       amount: z.number()
         .positive('განვადების თანხა დადებითი უნდა იყოს')
         .multipleOf(0.01, 'მაქსიმუმ 2 ათწილადი ციფრი დასაშვებია'),
-      
+
       due_date: z.string()
         .regex(/^\d{4}-\d{2}-\d{2}$/, 'არასწორი თარიღის ფორმატი (YYYY-MM-DD)')
         .refine((date) => {
@@ -169,7 +171,7 @@ export const installmentUpdateSchema = z.object({
     .multipleOf(0.01, 'მაქსიმუმ 2 ათწილადი ციფრი დასაშვებია')
     .max(999999999.99, 'თანხა ძალიან დიდია')
     .optional(),
-  
+
   due_date: z.string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'არასწორი თარიღის ფორმატი (YYYY-MM-DD)')
     .refine((date) => {
@@ -178,9 +180,130 @@ export const installmentUpdateSchema = z.object({
       return dueDate >= today
     }, 'თარიღი მომავალში უნდა იყოს')
     .optional(),
-  
+
   is_paid: z.boolean()
     .optional()
+})
+
+/**
+ * Team member creation validation schema
+ */
+export const teamMemberFormSchema = z.object({
+  name: z.string()
+    .min(2, 'სახელი მინიმუმ 2 სიმბოლო უნდა იყოს')
+    .max(255, 'სახელი მაქსიმუმ 255 სიმბოლო უნდა იყოს')
+    .trim(),
+
+  email: z.string()
+    .email('არასწორი ელ-ფოსტის ფორმატი')
+    .max(255, 'ელ-ფოსტა მაქსიმუმ 255 სიმბოლო უნდა იყოს')
+    .toLowerCase()
+    .trim(),
+
+  phone: z.string()
+    .max(50, 'ტელეფონი მაქსიმუმ 50 სიმბოლო უნდა იყოს')
+    .trim()
+    .optional()
+    .nullable(),
+
+  role: z.string()
+    .max(100, 'როლი მაქსიმუმ 100 სიმბოლო უნდა იყოს')
+    .trim()
+    .optional()
+    .nullable(),
+
+  hourly_rate: z.number()
+    .positive('საათობრივი განაკვეთი დადებითი უნდა იყოს')
+    .multipleOf(0.01, 'მაქსიმუმ 2 ათწილადი ციფრი დასაშვებია')
+    .max(999999.99, 'განაკვეთი ძალიან დიდია')
+    .optional()
+    .nullable(),
+
+  avatar_url: z.string()
+    .url('არასწორი URL ფორმატი')
+    .max(500, 'URL ძალიან გრძელია')
+    .trim()
+    .optional()
+    .nullable(),
+
+  bio: z.string()
+    .max(2000, 'ბიოგრაფია მაქსიმუმ 2000 სიმბოლო უნდა იყოს')
+    .trim()
+    .optional()
+    .nullable(),
+
+  skills: z.array(z.string().trim())
+    .optional()
+    .nullable()
+})
+
+/**
+ * Team member update validation schema
+ */
+export const teamMemberUpdateSchema = z.object({
+  name: z.string()
+    .min(2, 'სახელი მინიმუმ 2 სიმბოლო უნდა იყოს')
+    .max(255, 'სახელი მაქსიმუმ 255 სიმბოლო უნდა იყოს')
+    .trim()
+    .optional(),
+
+  email: z.string()
+    .email('არასწორი ელ-ფოსტის ფორმატი')
+    .max(255, 'ელ-ფოსტა მაქსიმუმ 255 სიმბოლო უნდა იყოს')
+    .toLowerCase()
+    .trim()
+    .optional(),
+
+  phone: z.string()
+    .max(50, 'ტელეფონი მაქსიმუმ 50 სიმბოლო უნდა იყოს')
+    .trim()
+    .optional()
+    .nullable(),
+
+  role: z.string()
+    .max(100, 'როლი მაქსიმუმ 100 სიმბოლო უნდა იყოს')
+    .trim()
+    .optional()
+    .nullable(),
+
+  hourly_rate: z.number()
+    .positive('საათობრივი განაკვეთი დადებითი უნდა იყოს')
+    .multipleOf(0.01, 'მაქსიმუმ 2 ათწილადი ციფრი დასაშვებია')
+    .max(999999.99, 'განაკვეთი ძალიან დიდია')
+    .optional()
+    .nullable(),
+
+  avatar_url: z.string()
+    .url('არასწორი URL ფორმატი')
+    .max(500, 'URL ძალიან გრძელია')
+    .trim()
+    .optional()
+    .nullable(),
+
+  bio: z.string()
+    .max(2000, 'ბიოგრაფია მაქსიმუმ 2000 სიმბოლო უნდა იყოს')
+    .trim()
+    .optional()
+    .nullable(),
+
+  skills: z.array(z.string().trim())
+    .optional()
+    .nullable(),
+
+  is_active: z.boolean()
+    .optional()
+})
+
+/**
+ * Team member filters validation schema
+ */
+export const teamMemberFiltersSchema = z.object({
+  is_active: z.boolean().optional(),
+  role: z.string().max(100).optional(),
+  search: z.string().max(255).optional(),
+  project_id: z.string().uuid().optional(),
+  sort_by: z.enum(['name', 'created_at', 'total_projects', 'total_completed_budget']).optional(),
+  sort_order: z.enum(['asc', 'desc']).optional()
 })
 
 // =====================================================
@@ -343,9 +466,12 @@ export type ProjectUpdateData = z.infer<typeof projectUpdateSchema>
 export type TransactionFormData = z.infer<typeof transactionFormSchema>
 export type InstallmentFormData = z.infer<typeof installmentFormSchema>
 export type InstallmentUpdateData = z.infer<typeof installmentUpdateSchema>
+export type TeamMemberFormData = z.infer<typeof teamMemberFormSchema>
+export type TeamMemberUpdateData = z.infer<typeof teamMemberUpdateSchema>
 export type ProjectFiltersData = z.infer<typeof projectFiltersSchema>
 export type TransactionFiltersData = z.infer<typeof transactionFiltersSchema>
 export type InstallmentFiltersData = z.infer<typeof installmentFiltersSchema>
+export type TeamMemberFiltersData = z.infer<typeof teamMemberFiltersSchema>
 export type PaginationData = z.infer<typeof paginationSchema>
 
 // =====================================================

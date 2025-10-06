@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -22,8 +22,11 @@ import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/utils/format'
 import { createTransactionAction } from '../actions'
 import { useToast } from '@/hooks/use-toast'
-import { Project, PaymentInstallment } from '@/types'
+import { ProjectWithStats, PaymentInstallment, InstallmentWithStats } from '@/types'
 import { useProjects } from '@/hooks/use-projects'
+import { getProjectInstallments } from '@/lib/supabase/installments'
+import { useQueryClient } from '@tanstack/react-query'
+import { projectKeys } from '@/hooks/use-projects'
 
 const transactionSchema = z.object({
   amount: z.number().positive('თანხა უნდა იყოს დადებითი'),
@@ -37,10 +40,16 @@ type TransactionFormData = z.infer<typeof transactionSchema>
 
 export function TransactionForm() {
   const { toast } = useToast()
-  const { projects, isLoading: projectsLoading } = useProjects()
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null)
-  const [availableInstallments, setAvailableInstallments] = useState<PaymentInstallment[]>([])
-  const [selectedInstallment, setSelectedInstallment] = useState<PaymentInstallment | null>(null)
+  const queryClient = useQueryClient()
+  const { projects: rawProjects, isLoading: projectsLoading } = useProjects()
+
+  // Memoize projects to prevent infinite loops
+  const projects = useMemo(() => rawProjects || [], [rawProjects])
+
+  const [selectedProject, setSelectedProject] = useState<ProjectWithStats | null>(null)
+  const [availableInstallments, setAvailableInstallments] = useState<InstallmentWithStats[]>([])
+  const [selectedInstallment, setSelectedInstallment] = useState<InstallmentWithStats | null>(null)
+  const [loadingInstallments, setLoadingInstallments] = useState(false)
   const [validationWarnings, setValidationWarnings] = useState<{
     budgetExceeded?: boolean
     installmentExceeded?: boolean
@@ -67,19 +76,42 @@ export function TransactionForm() {
 
   // Update selected project and available installments
   useEffect(() => {
-    if (watchedProjectId && projects) {
-      const project = projects.find(p => p.id === watchedProjectId)
-      setSelectedProject(project || null)
-      
-      // For now, we'll assume the project doesn't have installments loaded
-      // This would need to be fetched from the database in a real implementation
+    if (!watchedProjectId || !projects || projects.length === 0) {
+      setSelectedProject(null)
       setAvailableInstallments([])
-    } else {
+      setSelectedInstallment(null)
+      return
+    }
+
+    const project = projects.find(p => p.id === watchedProjectId)
+
+    // Only update if the project actually changed
+    if (project && project.id !== selectedProject?.id) {
+      setSelectedProject(project)
+
+      // Load installments if project has installment payment type
+      if (project.payment_type === 'installment') {
+        setLoadingInstallments(true)
+        getProjectInstallments(project.id)
+          .then((installments) => {
+            setAvailableInstallments(installments)
+            setLoadingInstallments(false)
+          })
+          .catch((error) => {
+            console.error('Error loading installments:', error)
+            setAvailableInstallments([])
+            setLoadingInstallments(false)
+          })
+      } else {
+        setAvailableInstallments([])
+      }
+    } else if (!project && selectedProject) {
       setSelectedProject(null)
       setAvailableInstallments([])
       setSelectedInstallment(null)
     }
-  }, [watchedProjectId, projects])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedProjectId])
 
   // Update selected installment
   useEffect(() => {
@@ -142,12 +174,31 @@ export function TransactionForm() {
   const handleSubmit = async (data: TransactionFormData) => {
     try {
       const result = await createTransactionAction(data)
-      
+
       if (result.success) {
         toast({
           title: "წარმატება!",
           description: "ტრანზაქცია წარმატებით დაემატა",
         })
+
+        // Invalidate projects queries to refresh received_amount and remaining_amount
+        queryClient.invalidateQueries({ queryKey: projectKeys.lists() })
+        queryClient.invalidateQueries({ queryKey: projectKeys.detail(data.project_id) })
+
+        // Reload installments if this was an installment transaction
+        if (data.installment_id && selectedProject) {
+          getProjectInstallments(selectedProject.id)
+            .then((installments) => {
+              setAvailableInstallments(installments)
+              // Update selected installment
+              const updatedInstallment = installments.find(inst => inst.id === data.installment_id)
+              setSelectedInstallment(updatedInstallment || null)
+            })
+            .catch((error) => {
+              console.error('Error reloading installments:', error)
+            })
+        }
+
         form.reset()
         setShowConfirmDialog(false)
         setPendingSubmission(null)
@@ -194,7 +245,7 @@ export function TransactionForm() {
                 </SelectTrigger>
                 <SelectContent>
                   {projectsLoading ? (
-                    <SelectItem value="" disabled>
+                    <SelectItem value="loading" disabled>
                       იტვირთება...
                     </SelectItem>
                   ) : projects?.length ? (
@@ -209,7 +260,7 @@ export function TransactionForm() {
                       </SelectItem>
                     ))
                   ) : (
-                    <SelectItem value="" disabled>
+                    <SelectItem value="no-projects" disabled>
                       პროექტები არ მოიძებნა
                     </SelectItem>
                   )}
@@ -223,35 +274,61 @@ export function TransactionForm() {
             </div>
 
             {/* Installment Selection */}
-            {selectedProject?.payment_type === 'installment' && availableInstallments.length > 0 && (
+            {selectedProject?.payment_type === 'installment' && (
               <div className="space-y-2">
-                <Label htmlFor="installment">ვადა</Label>
+                <Label htmlFor="installment">განვადება (არასავალდებულო)</Label>
                 <Select
-                  value={form.watch('installment_id')}
-                  onValueChange={(value) => form.setValue('installment_id', value)}
+                  value={form.watch('installment_id') || 'none'}
+                  onValueChange={(value) => form.setValue('installment_id', value === 'none' ? undefined : value)}
+                  disabled={loadingInstallments}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="აირჩიეთ ვადა (არასავალდებულო)" />
+                    <SelectValue placeholder={loadingInstallments ? "იტვირთება..." : "აირჩიეთ განვადება"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {availableInstallments.map((installment) => {
-                      const remaining = installment.amount // For now, assume full amount remaining
-                      return (
-                        <SelectItem key={installment.id} value={installment.id}>
-                          <div className="flex items-center justify-between w-full">
-                            <span>
-                              ვადა {installment.installment_number}
-                              {installment.due_date && ` - ${format(new Date(installment.due_date), 'dd MMM', { locale: ka })}`}
-                            </span>
-                            <Badge variant={remaining > 0 ? "secondary" : "outline"} className="ml-2">
-                              {formatCurrency(remaining)}
-                            </Badge>
-                          </div>
-                        </SelectItem>
-                      )
-                    })}
+                    {loadingInstallments ? (
+                      <SelectItem value="loading" disabled>
+                        იტვირთება...
+                      </SelectItem>
+                    ) : availableInstallments.length === 0 ? (
+                      <SelectItem value="no-installments" disabled>
+                        განვადებები არ მოიძებნა
+                      </SelectItem>
+                    ) : (
+                      <>
+                        <SelectItem value="none">არცერთი (მთელი პროექტი)</SelectItem>
+                        {availableInstallments.map((installment) => {
+                          const remaining = installment.remaining_amount || installment.amount
+                          const isPaid = installment.is_fully_paid || false
+                          const isOverdue = installment.is_overdue || false
+
+                          return (
+                            <SelectItem key={installment.id} value={installment.id}>
+                              <div className="flex items-center justify-between w-full gap-2">
+                                <span>
+                                  განვადება #{installment.installment_number}
+                                  {installment.due_date && ` - ${format(new Date(installment.due_date), 'dd MMM', { locale: ka })}`}
+                                </span>
+                                <div className="flex items-center gap-1">
+                                  <Badge
+                                    variant={isPaid ? "default" : isOverdue ? "destructive" : "secondary"}
+                                    className="ml-2"
+                                  >
+                                    {formatCurrency(remaining)}
+                                  </Badge>
+                                  {isPaid && <Badge variant="outline">✓</Badge>}
+                                </div>
+                              </div>
+                            </SelectItem>
+                          )
+                        })}
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  აირჩიეთ კონკრეტული განვადება ან დატოვეთ ცარიელი მთელი პროექტისთვის
+                </p>
               </div>
             )}
 
@@ -266,6 +343,55 @@ export function TransactionForm() {
                 placeholder="0.00"
                 {...form.register('amount', { valueAsNumber: true })}
               />
+
+              {/* Quick Amount Buttons */}
+              {(() => {
+                // Show installment remaining if installment is selected, otherwise project remaining
+                const targetAmount = selectedInstallment
+                  ? (selectedInstallment.remaining_amount || 0)
+                  : (selectedProject?.remaining_amount || 0)
+
+                const targetLabel = selectedInstallment
+                  ? `განვადება #${selectedInstallment.installment_number}`
+                  : 'პროექტი'
+
+                if (targetAmount > 0) {
+                  return (
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground">
+                        სწრაფი შევსება ({targetLabel}):
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => {
+                            const halfAmount = targetAmount / 2
+                            form.setValue('amount', halfAmount)
+                          }}
+                        >
+                          50% ({formatCurrency(targetAmount / 2)})
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => {
+                            form.setValue('amount', targetAmount)
+                          }}
+                        >
+                          100% ({formatCurrency(targetAmount)})
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                }
+                return null
+              })()}
+
               {form.formState.errors.amount && (
                 <p className="text-sm text-destructive">
                   {form.formState.errors.amount.message}
@@ -304,42 +430,75 @@ export function TransactionForm() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>მიღებული:</span>
-                  <span>{formatCurrency(0)}</span>
+                  <span className="text-green-600 font-medium">
+                    {formatCurrency(selectedProject.total_received || 0)}
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm font-medium">
                   <span>დარჩენილი:</span>
                   <span className={cn(
-                    (selectedProject.total_budget - 0) < 0 && "text-destructive"
+                    "text-lg",
+                    (selectedProject.remaining_amount || 0) < 0 && "text-destructive",
+                    (selectedProject.remaining_amount || 0) > 0 && "text-blue-600"
                   )}>
-                    {formatCurrency(selectedProject.total_budget - 0)}
+                    {formatCurrency(selectedProject.remaining_amount || 0)}
                   </span>
                 </div>
+                {selectedProject.completion_percentage !== undefined && (
+                  <div className="pt-2">
+                    <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                      <span>პროგრესი</span>
+                      <span>{selectedProject.completion_percentage.toFixed(1)}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-gradient-to-r from-green-500 to-green-600 h-2 rounded-full transition-all"
+                        style={{ width: `${Math.min(selectedProject.completion_percentage, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
             {/* Selected Installment Info */}
             {selectedInstallment && (
               <div className="p-3 rounded-md bg-blue-50 border border-blue-200 space-y-2">
+                <div className="text-sm font-medium text-blue-900 mb-2">
+                  განვადება #{selectedInstallment.installment_number}
+                </div>
                 <div className="flex justify-between text-sm">
-                  <span>ვადის თანხა:</span>
+                  <span>თანხა:</span>
                   <span className="font-medium">{formatCurrency(selectedInstallment.amount)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>გადახდილი:</span>
-                  <span>{formatCurrency(0)}</span>
+                  <span className="text-green-600">
+                    {formatCurrency(selectedInstallment.paid_amount || 0)}
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm font-medium">
                   <span>დარჩენილი:</span>
                   <span className={cn(
-                    (selectedInstallment.amount - 0) < 0 && "text-destructive"
+                    "text-lg",
+                    (selectedInstallment.remaining_amount || 0) < 0 && "text-destructive",
+                    (selectedInstallment.remaining_amount || 0) > 0 && "text-blue-600"
                   )}>
-                    {formatCurrency(selectedInstallment.amount - 0)}
+                    {formatCurrency(selectedInstallment.remaining_amount || 0)}
                   </span>
                 </div>
                 {selectedInstallment.due_date && (
                   <div className="flex justify-between text-sm">
-                    <span>თარიღი:</span>
-                    <span>{format(new Date(selectedInstallment.due_date), 'dd MMMM yyyy', { locale: ka })}</span>
+                    <span>ვადის თარიღი:</span>
+                    <span className="font-medium">
+                      {format(new Date(selectedInstallment.due_date), 'dd MMMM yyyy', { locale: ka })}
+                    </span>
+                  </div>
+                )}
+                {selectedInstallment.is_overdue && (
+                  <div className="flex items-center gap-1 text-xs text-red-600 mt-2">
+                    <AlertTriangle className="h-3 w-3" />
+                    <span>ვადაგადაცილებული</span>
                   </div>
                 )}
               </div>

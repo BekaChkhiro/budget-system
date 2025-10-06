@@ -12,21 +12,29 @@ export type Functions = Database['public']['Functions']
 export type Project = Tables['projects']['Row']
 export type PaymentInstallment = Tables['payment_installments']['Row']
 export type Transaction = Tables['transactions']['Row']
+export type TeamMember = Tables['team_members']['Row']
+export type ProjectTeamMember = Tables['project_team_members']['Row']
 
 // Insert types for creating new records
 export type ProjectInsert = Tables['projects']['Insert']
 export type PaymentInstallmentInsert = Tables['payment_installments']['Insert']
 export type TransactionInsert = Tables['transactions']['Insert']
+export type TeamMemberInsert = Tables['team_members']['Insert']
+export type ProjectTeamMemberInsert = Tables['project_team_members']['Insert']
 
 // Update types for modifying existing records
 export type ProjectUpdate = Tables['projects']['Update']
 export type PaymentInstallmentUpdate = Tables['payment_installments']['Update']
 export type TransactionUpdate = Tables['transactions']['Update']
+export type TeamMemberUpdate = Tables['team_members']['Update']
+export type ProjectTeamMemberUpdate = Tables['project_team_members']['Update']
 
 // View types
 export type ProjectSummary = Views['project_summary']['Row']
 export type InstallmentSummary = Views['installment_summary']['Row']
 export type DashboardStats = Views['dashboard_stats']['Row']
+export type TeamMemberStats = Views['team_member_stats']['Row']
+export type TeamMemberAnalytics = Views['team_member_analytics']['Row']
 
 // =====================================================
 // ENHANCED TYPES WITH COMPUTED FIELDS
@@ -94,6 +102,52 @@ export interface ProjectWithRelations extends Project {
   installments: PaymentInstallment[]
   /** All transactions for this project */
   transactions: Transaction[]
+  /** Team members assigned to this project */
+  team_members?: TeamMemberWithStats[]
+}
+
+/**
+ * Team member with comprehensive statistics
+ */
+export interface TeamMemberWithStats extends TeamMember {
+  /** Total number of projects */
+  total_projects: number
+  /** Number of completed projects */
+  completed_projects: number
+  /** Number of active projects */
+  active_projects: number
+  /** Total budget from completed projects */
+  total_completed_budget: number
+  /** Total budget from active projects */
+  total_active_budget: number
+  /** Current projects this member is assigned to */
+  projects?: Project[]
+}
+
+/**
+ * Team member with time-based analytics
+ */
+export interface TeamMemberWithAnalytics extends TeamMember {
+  /** Projects completed last month */
+  completed_projects_last_month: number
+  /** Revenue from last month */
+  revenue_last_month: number
+  /** Projects completed in last 3 months */
+  completed_projects_last_3_months: number
+  /** Revenue from last 3 months */
+  revenue_last_3_months: number
+  /** Projects completed in last 6 months */
+  completed_projects_last_6_months: number
+  /** Revenue from last 6 months */
+  revenue_last_6_months: number
+  /** Projects completed in last year */
+  completed_projects_last_year: number
+  /** Revenue from last year */
+  revenue_last_year: number
+  /** Total completed projects */
+  total_completed_projects: number
+  /** Total revenue */
+  total_revenue: number
 }
 
 // =====================================================
@@ -117,6 +171,8 @@ export interface CreateProjectInput extends Record<string, unknown> {
     /** Due date in YYYY-MM-DD format */
     due_date: string
   }>
+  /** Team member IDs to assign to this project */
+  team_member_ids?: string[]
 }
 
 /**
@@ -129,6 +185,8 @@ export interface UpdateProjectInput {
   total_budget?: number
   /** Optional payment type update */
   payment_type?: 'single' | 'installment'
+  /** Optional team member IDs update */
+  team_member_ids?: string[]
 }
 
 /**
@@ -159,6 +217,52 @@ export interface CreateInstallmentInput extends Record<string, unknown> {
   amount: number
   /** Due date */
   due_date: string
+}
+
+/**
+ * Input type for creating a new team member
+ */
+export interface CreateTeamMemberInput extends Record<string, unknown> {
+  /** Team member name */
+  name: string
+  /** Email address */
+  email: string
+  /** Phone number (optional) */
+  phone?: string
+  /** Role/position */
+  role?: string
+  /** Hourly rate (optional) */
+  hourly_rate?: number
+  /** Avatar URL (optional) */
+  avatar_url?: string
+  /** Bio/description (optional) */
+  bio?: string
+  /** Skills array (optional) */
+  skills?: string[]
+}
+
+/**
+ * Input type for updating a team member
+ */
+export interface UpdateTeamMemberInput {
+  /** Optional name update */
+  name?: string
+  /** Optional email update */
+  email?: string
+  /** Optional phone update */
+  phone?: string
+  /** Optional role update */
+  role?: string
+  /** Optional hourly rate update */
+  hourly_rate?: number
+  /** Optional avatar URL update */
+  avatar_url?: string
+  /** Optional bio update */
+  bio?: string
+  /** Optional skills update */
+  skills?: string[]
+  /** Optional active status update */
+  is_active?: boolean
 }
 
 // =====================================================
@@ -304,6 +408,24 @@ export interface InstallmentFilters {
   due_date_to?: string
   /** Sort field */
   sort_by?: 'due_date' | 'installment_number' | 'amount'
+  /** Sort direction */
+  sort_order?: 'asc' | 'desc'
+}
+
+/**
+ * Team member filter options
+ */
+export interface TeamMemberFilters {
+  /** Filter by active status */
+  is_active?: boolean
+  /** Filter by role */
+  role?: string
+  /** Search in name, email, or skills */
+  search?: string
+  /** Filter members assigned to a specific project */
+  project_id?: string
+  /** Sort field */
+  sort_by?: 'name' | 'created_at' | 'total_projects' | 'total_completed_budget'
   /** Sort direction */
   sort_order?: 'asc' | 'desc'
 }
@@ -456,17 +578,66 @@ export interface UseDashboardReturn {
   // Data
   overview: DashboardOverview | null
   stats: DashboardStats | null
-  
+
   // Status
   isLoading: boolean
   error: string | null
   isLoaded: boolean
-  
+
   // Metadata
   lastUpdated: string | null
   refreshInterval: number
-  
+
   // Actions
   refetch: () => void
   setAutoRefresh: (enabled: boolean) => void
+}
+
+/**
+ * Return type for useTeamMembers hook
+ */
+export interface UseTeamMembersReturn {
+  // Data
+  teamMembers: TeamMemberWithStats[]
+  pagination?: PaginatedResponse<TeamMemberWithStats>['pagination']
+
+  // Status
+  isLoading: boolean
+  error: string | null
+  isLoaded: boolean
+
+  // Actions
+  refetch: () => void
+  createTeamMember: (input: CreateTeamMemberInput) => Promise<TeamMember>
+  updateTeamMember: (params: { id: string; input: UpdateTeamMemberInput }) => Promise<TeamMember>
+  deleteTeamMember: (id: string) => Promise<void>
+
+  // Filter management
+  filters: TeamMemberFilters
+  setFilters: () => void
+  clearFilters: () => void
+}
+
+/**
+ * Return type for useTeamMember hook (single member)
+ */
+export interface UseTeamMemberReturn {
+  // Data
+  teamMember: TeamMemberWithStats | null
+  analytics?: TeamMemberWithAnalytics
+
+  // Computed data
+  projects: Project[]
+  activeProjects: Project[]
+  completedProjects: Project[]
+
+  // Status
+  isLoading: boolean
+  error: string | null
+  exists: boolean
+
+  // Actions
+  refetch: () => void
+  updateTeamMember: (input: UpdateTeamMemberInput) => Promise<TeamMember>
+  deleteTeamMember: () => Promise<void>
 }

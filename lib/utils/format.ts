@@ -14,10 +14,17 @@ export function formatCurrency(amount: number, includeDecimals = true): string {
     return '0 ₾'
   }
 
-  const formatted = new Intl.NumberFormat('ka-GE', {
-    minimumFractionDigits: includeDecimals ? 2 : 0,
-    maximumFractionDigits: includeDecimals ? 2 : 0,
-  }).format(amount)
+  // Manual formatting to ensure consistency between server and client
+  const fixedAmount = includeDecimals ? amount.toFixed(2) : Math.round(amount).toString()
+
+  // Split into integer and decimal parts
+  const [integerPart, decimalPart] = fixedAmount.split('.')
+
+  // Add thousand separators
+  const withSeparators = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+
+  // Combine parts
+  const formatted = decimalPart ? `${withSeparators}.${decimalPart}` : withSeparators
 
   return `${formatted} ₾`
 }
@@ -49,46 +56,49 @@ export function formatCurrencyCompact(amount: number): string {
  */
 export function formatDate(date: string | Date, includeTime = false): string {
   if (!date) return ''
-  
+
   const dateObj = typeof date === 'string' ? new Date(date) : date
-  
+
   if (isNaN(dateObj.getTime())) {
     return ''
   }
 
-  const options: Intl.DateTimeFormatOptions = {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  }
+  // Use manual formatting to ensure consistency between server and client
+  const day = dateObj.getDate()
+  const month = GEORGIAN_MONTHS[dateObj.getMonth()]
+  const year = dateObj.getFullYear()
+
+  let formatted = `${day} ${month}, ${year}`
 
   if (includeTime) {
-    options.hour = '2-digit'
-    options.minute = '2-digit'
+    const hours = String(dateObj.getHours()).padStart(2, '0')
+    const minutes = String(dateObj.getMinutes()).padStart(2, '0')
+    formatted += ` ${hours}:${minutes}`
   }
 
-  return new Intl.DateTimeFormat('ka-GE', options).format(dateObj)
+  return formatted
 }
 
 /**
- * Format date in short format (DD/MM/YYYY)
+ * Format date in short format (DD.MM.YYYY)
  * @param date - Date string or Date object
  * @returns Short formatted date string
  */
 export function formatDateShort(date: string | Date): string {
   if (!date) return ''
-  
+
   const dateObj = typeof date === 'string' ? new Date(date) : date
-  
+
   if (isNaN(dateObj.getTime())) {
     return ''
   }
 
-  return new Intl.DateTimeFormat('ka-GE', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(dateObj)
+  // Use manual formatting to ensure consistency between server and client
+  const day = String(dateObj.getDate()).padStart(2, '0')
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0')
+  const year = dateObj.getFullYear()
+
+  return `${day}.${month}.${year}`
 }
 
 /**

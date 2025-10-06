@@ -1,12 +1,10 @@
-import { Suspense } from 'react'
 import { TransactionForm } from './components/transaction-form'
 import { TransactionsList } from './components/transactions-list'
-import { TransactionStats } from './components/transaction-stats'
-import { TransactionsListSkeleton } from './components/transactions-list-skeleton'
+import { TransactionStatsClient } from './components/transaction-stats-client'
 
 export default function TransactionsPage() {
   return (
-    <div className="space-y-6">
+    <div className="container mx-auto p-4 md:p-6 space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">ტრანზაქციები</h1>
@@ -16,9 +14,7 @@ export default function TransactionsPage() {
       </div>
 
       {/* Quick Stats */}
-      <Suspense fallback={<div className="h-24 animate-pulse bg-muted rounded-lg" />}>
-        <TransactionStats />
-      </Suspense>
+      <TransactionStatsClient />
 
       {/* Main Content - Split Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -31,9 +27,7 @@ export default function TransactionsPage() {
 
         {/* Transactions List - Right Side */}
         <div className="lg:col-span-7 xl:col-span-8">
-          <Suspense fallback={<TransactionsListSkeleton />}>
-            <TransactionsList />
-          </Suspense>
+          <TransactionsList />
         </div>
       </div>
     </div>

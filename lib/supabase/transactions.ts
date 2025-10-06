@@ -35,15 +35,23 @@ export async function getTransactions(
 ): Promise<PaginatedResponse<TransactionWithRelations>> {
   return withErrorHandling(async () => {
     const supabase = createClient()
-    
+
+    // Get current user to filter by user_id
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      throw new Error('ავტორიზაცია საჭიროა')
+    }
+
     let query = supabase
       .from('transactions')
       .select(`
         *,
-        project:projects(*),
+        project:projects!inner(*),
         installment:payment_installments(*)
       `, { count: 'exact' })
-    
+      .eq('project.user_id', user.id)
+
     // Apply filters
     if (filters?.project_id) {
       query = query.eq('project_id', filters.project_id)
@@ -113,26 +121,34 @@ export async function getTransactions(
 export async function getTransactionById(id: string): Promise<TransactionWithRelations> {
   return withErrorHandling(async () => {
     validateRequired({ id }, ['id'])
-    
+
     const supabase = createClient()
-    
+
+    // Get current user to filter by user_id
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      throw new Error('ავტორიზაცია საჭიროა')
+    }
+
     const { data, error } = await supabase
       .from('transactions')
       .select(`
         *,
-        project:projects(*),
+        project:projects!inner(*),
         installment:payment_installments(*)
       `)
       .eq('id', id)
+      .eq('project.user_id', user.id)
       .single()
-    
+
     if (error) {
       if (error.code === 'PGRST116') {
         handleBusinessError('RESOURCE_NOT_FOUND', 'ტრანზაქცია ვერ მოიძებნა')
       }
       handleSupabaseError(error, 'ტრანზაქციის ჩატვირთვა ვერ მოხერხდა')
     }
-    
+
     return data as TransactionWithRelations
   }, 'ტრანზაქციის ჩატვირთვა ვერ მოხერხდა')
 }
@@ -149,24 +165,32 @@ export async function getProjectTransactions(
 ): Promise<TransactionWithRelations[]> {
   return withErrorHandling(async () => {
     validateRequired({ projectId }, ['projectId'])
-    
+
     const supabase = createClient()
-    
+
+    // Get current user to filter by user_id
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      throw new Error('ავტორიზაცია საჭიროა')
+    }
+
     const { data, error } = await supabase
       .from('transactions')
       .select(`
         *,
-        project:projects(*),
+        project:projects!inner(*),
         installment:payment_installments(*)
       `)
       .eq('project_id', projectId)
+      .eq('project.user_id', user.id)
       .order('transaction_date', { ascending: false })
       .limit(limit)
-    
+
     if (error) {
       handleSupabaseError(error, 'პროექტის ტრანზაქციების ჩატვირთვა ვერ მოხერხდა')
     }
-    
+
     return data as TransactionWithRelations[]
   }, 'პროექტის ტრანზაქციების ჩატვირთვა ვერ მოხერხდა')
 }
@@ -206,21 +230,29 @@ export async function getInstallmentTransactions(
 export async function getRecentTransactions(limit = 10): Promise<TransactionWithRelations[]> {
   return withErrorHandling(async () => {
     const supabase = createClient()
-    
+
+    // Get current user to filter by user_id
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      throw new Error('ავტორიზაცია საჭიროა')
+    }
+
     const { data, error } = await supabase
       .from('transactions')
       .select(`
         *,
-        project:projects(id, title),
+        project:projects!inner(id, title, user_id),
         installment:payment_installments(installment_number)
       `)
+      .eq('project.user_id', user.id)
       .order('transaction_date', { ascending: false })
       .limit(limit)
-    
+
     if (error) {
       handleSupabaseError(error, 'ბოლო ტრანზაქციების ჩატვირთვა ვერ მოხერხდა')
     }
-    
+
     return data as TransactionWithRelations[]
   }, 'ბოლო ტრანზაქციების ჩატვირთვა ვერ მოხერხდა')
 }

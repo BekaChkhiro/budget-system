@@ -13,17 +13,19 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { 
-  Edit, 
-  Trash2, 
-  MoreHorizontal, 
-  FolderOpen, 
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import {
+  Edit,
+  Trash2,
+  MoreHorizontal,
+  FolderOpen,
   Eye,
   Calendar,
   DollarSign,
   CheckCircle,
   Clock,
-  AlertCircle
+  AlertCircle,
+  Users
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -99,6 +101,7 @@ export function ProjectsTable({ projects, pagination, currentFilters }: Projects
           <TableHeader>
             <TableRow>
               <TableHead>პროექტი</TableHead>
+              <TableHead>გუნდი</TableHead>
               <TableHead className="text-right">ბიუჯეტი</TableHead>
               <TableHead>ტიპი</TableHead>
               <TableHead className="text-right">მიღებული</TableHead>
@@ -111,7 +114,7 @@ export function ProjectsTable({ projects, pagination, currentFilters }: Projects
           <TableBody>
             {projects.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-12">
+                <TableCell colSpan={9} className="text-center py-12">
                   <EmptyState />
                 </TableCell>
               </TableRow>
@@ -184,11 +187,20 @@ function ProjectTableRow({
     return 'default'
   }
 
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2)
+  }
+
   return (
     <TableRow className="hover:bg-muted/50">
       <TableCell>
         <div className="space-y-1">
-          <Link 
+          <Link
             href={`/projects/${project.id}`}
             className="font-medium hover:text-primary transition-colors"
           >
@@ -205,7 +217,34 @@ function ProjectTableRow({
           </div>
         </div>
       </TableCell>
-      
+
+      <TableCell>
+        {project.team_members && project.team_members.length > 0 ? (
+          <div className="flex items-center gap-1">
+            <div className="flex -space-x-2">
+              {project.team_members.slice(0, 3).map((member: any) => (
+                <Avatar key={member.id} className="h-7 w-7 border-2 border-background">
+                  <AvatarImage src={member.avatar_url || undefined} />
+                  <AvatarFallback className="text-xs">
+                    {getInitials(member.name)}
+                  </AvatarFallback>
+                </Avatar>
+              ))}
+            </div>
+            {project.team_members.length > 3 && (
+              <span className="text-xs text-muted-foreground">
+                +{project.team_members.length - 3}
+              </span>
+            )}
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground flex items-center gap-1">
+            <Users className="h-3 w-3" />
+            არ არის
+          </span>
+        )}
+      </TableCell>
+
       <TableCell className="text-right font-medium">
         {formatCurrency(project.total_budget)}
       </TableCell>

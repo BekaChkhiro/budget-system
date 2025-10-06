@@ -1,23 +1,30 @@
 import { createClient } from '@/lib/supabase/middleware'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { Ratelimit } from '@upstash/ratelimit'
-import { Redis } from '@upstash/redis'
-import { getValidIP } from '@/lib/utils/ip-utils'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { Database } from '@/types/database.types'
 
-// Rate limiting configuration
-const ratelimit = new Ratelimit({
-  redis: Redis.fromEnv(),
-  limiter: Ratelimit.slidingWindow(100, '1 m'), // 100 requests per minute
-  analytics: true,
-  prefix: 'ratelimit:middleware',
-})
+// Optional rate limiting configuration (only if Redis env vars are available)
+let ratelimit: any = null
+try {
+  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    const { Ratelimit } = require('@upstash/ratelimit')
+    const { Redis } = require('@upstash/redis')
+    const { getValidIP } = require('@/lib/utils/ip-utils')
+
+    ratelimit = new Ratelimit({
+      redis: Redis.fromEnv(),
+      limiter: Ratelimit.slidingWindow(100, '1 m'), // 100 requests per minute
+      analytics: true,
+      prefix: 'ratelimit:middleware',
+    })
+  }
+} catch (error) {
+  console.warn('Rate limiting disabled: Upstash Redis not configured')
+}
 
 // Paths that don't require authentication
 const publicPaths = [
-  '/',
   '/login',
   '/signup',
   '/reset-password',
@@ -46,17 +53,18 @@ export async function middleware(request: NextRequest) {
   }
 
   try {
-    // Apply rate limiting to API routes
-    if (pathname.startsWith('/api/')) {
+    // Apply rate limiting to API routes (if configured)
+    if (ratelimit && pathname.startsWith('/api/')) {
+      const { getValidIP } = require('@/lib/utils/ip-utils')
       const ip = getValidIP(request)
       const { success, limit, reset, remaining } = await ratelimit.limit(ip)
-      
+
       // Set rate limit headers
       const response = NextResponse.next()
       response.headers.set('X-RateLimit-Limit', limit.toString())
       response.headers.set('X-RateLimit-Remaining', remaining.toString())
       response.headers.set('X-RateLimit-Reset', reset.toString())
-      
+
       if (!success) {
         return new NextResponse(JSON.stringify({ error: 'Too many requests' }), {
           status: 429,
@@ -70,23 +78,11 @@ export async function middleware(request: NextRequest) {
       }
     }
 
-    // Create a new Supabase client for server-side operations
-    const supabase = createSupabaseClient<Database>(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
-    )
-    
-    // Get the response from the original middleware client
-    const { response } = await createClient(request)
-    
-    // Get user session
-    const { data: { user }, error } = await supabase.auth.getUser()
+    // Get Supabase client with proper session handling
+    const { supabase, response } = await createClient(request)
+
+    // Get user session from cookies
+    const { data: { user } } = await supabase.auth.getUser()
     
     // Check if the path requires authentication
     const isAuthPath = authPaths.some(path => pathname.startsWith(path))

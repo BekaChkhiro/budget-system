@@ -4,6 +4,7 @@ import "./globals.css";
 import { Navigation } from "@/components/navigation";
 import { Toaster } from "@/components/ui/sonner";
 import { Analytics } from "@/components/analytics";
+import { Providers } from "@/components/providers";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -146,14 +147,16 @@ export default function RootLayout({
         <meta property="twitter:image" content={`${APP_URL}/og-image.jpg`} />
       </head>
       <body className="min-h-screen bg-background font-sans antialiased">
-        <div className="relative flex min-h-screen flex-col">
-          <Navigation />
-          <main className="flex-1">
-            {children}
-          </main>
-        </div>
-        <Toaster position="top-right" richColors closeButton />
-        <Analytics />
+        <Providers>
+          <div className="relative flex min-h-screen flex-col">
+            <Navigation />
+            <main className="flex-1">
+              {children}
+            </main>
+          </div>
+          <Toaster position="top-right" richColors closeButton />
+          <Analytics />
+        </Providers>
       </body>
     </html>
   );

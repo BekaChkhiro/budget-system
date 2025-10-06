@@ -106,21 +106,6 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                   დარეგისტრირდით
                 </Link>
               </p>
-              <Link href="/forgot-password" className="text-sm text-gray-600 hover:text-gray-500">
-                დაგავიწყდათ პაროლი?
-              </Link>
-            </div>
-
-            {/* Demo notice */}
-            <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-              <p className="text-sm text-blue-800">
-                <strong>დემო რეჟიმი:</strong> ეს არის დემო ვერსია. ავტორიზაცია ჯერ არ არის სრულად კონფიგურირებული.
-              </p>
-              <Link href="/">
-                <Button variant="outline" size="sm" className="mt-2 w-full">
-                  გაგრძელება დემო რეჟიმში
-                </Button>
-              </Link>
             </div>
           </CardContent>
         </Card>

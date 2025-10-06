@@ -56,9 +56,27 @@ export function useTransactions(
   const query = useQuery({
     queryKey: transactionKeys.list(filters || {}, page, pageSize),
     queryFn: () => getTransactions(filters, page, pageSize),
-    staleTime: 2 * 60 * 1000, // 2 minutes
+    staleTime: 30 * 1000, // 30 seconds - განახლება უფრო ხშირად
     gcTime: 10 * 60 * 1000, // 10 minutes
+    refetchInterval: 30 * 1000, // ავტომატური განახლება 30 წამში ერთხელ
     placeholderData: (previousData) => previousData,
+  })
+
+  // სტატისტიკის მონაცემები
+  const statsQuery = useQuery({
+    queryKey: [...transactionKeys.all, 'overview-stats'],
+    queryFn: async () => {
+      const now = new Date()
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+
+      return getTransactionStats(
+        startOfMonth.toISOString().split('T')[0],
+        endOfMonth.toISOString().split('T')[0]
+      )
+    },
+    staleTime: 30 * 1000,
+    refetchInterval: 30 * 1000,
   })
 
   const createMutation = useMutation({
@@ -140,18 +158,19 @@ export function useTransactions(
     // Data
     transactions: query.data?.data || [],
     pagination: query.data?.pagination,
-    
+    stats: statsQuery.data,
+
     // Status
     isLoading: query.isLoading,
     error: query.error?.message || null,
     isLoaded: !query.isLoading && !query.isError,
-    
+
     // Actions
     refetch: query.refetch,
     createTransaction: createMutation.mutateAsync,
     updateTransaction: updateMutation.mutateAsync,
     deleteTransaction: deleteMutation.mutateAsync,
-    
+
     // Filter management
     filters: filters || {},
     setFilters: () => {

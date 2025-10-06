@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/client'
+import { createClient } from '@/lib/supabase/server'
 import type {
   DashboardStats,
   DashboardOverview,
@@ -21,8 +21,15 @@ import {
  */
 export async function getDashboardData(): Promise<DashboardOverview> {
   return withErrorHandling(async () => {
-    const supabase = createClient()
-    
+    const supabase = await createClient()
+
+    // Get current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      throw new Error('ავტორიზაცია საჭიროა')
+    }
+
     // Execute all queries in parallel for better performance
     const [
       statsResult,
@@ -31,64 +38,74 @@ export async function getDashboardData(): Promise<DashboardOverview> {
       upcomingInstallmentsResult,
       overdueInstallmentsResult,
     ] = await Promise.allSettled([
-      // Dashboard statistics
+      // Dashboard statistics - needs to be calculated per user
       supabase
-        .from('dashboard_stats')
+        .from('project_summary')
         .select('*')
-        .single(),
-      
+        .eq('user_id', user.id),
+
       // Recent projects (last 5)
       supabase
         .from('project_summary')
         .select('*')
+        .eq('user_id', user.id)
         .order('updated_at', { ascending: false })
         .limit(5),
-      
+
       // Recent transactions (last 10) with project info
       supabase
         .from('transactions')
         .select(`
           *,
-          project:projects(id, title),
+          project:projects!inner(id, title, user_id),
           installment:payment_installments(installment_number)
         `)
+        .eq('project.user_id', user.id)
         .order('transaction_date', { ascending: false })
         .limit(10),
-      
+
       // Upcoming installments (next 7 days)
       supabase
         .from('installment_summary')
         .select(`
           *,
-          project:projects(id, title)
+          project:projects!inner(id, title, user_id)
         `)
+        .eq('project.user_id', user.id)
         .eq('is_paid', false)
         .gte('due_date', new Date().toISOString().split('T')[0])
         .lte('due_date', new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
         .order('due_date')
         .limit(5),
-      
+
       // Overdue installments
       supabase
         .from('installment_summary')
         .select(`
           *,
-          project:projects(id, title)
+          project:projects!inner(id, title, user_id)
         `)
+        .eq('project.user_id', user.id)
         .eq('is_overdue', true)
         .order('due_date')
         .limit(5),
     ])
     
-    // Handle errors from parallel queries
-    if (statsResult.status === 'rejected') {
-      handleSupabaseError(statsResult.reason, 'სტატისტიკის ჩატვირთვა ვერ მოხერხდა')
+    // Handle errors from parallel queries - stats are now calculated from projects
+    let stats: DashboardStats = getEmptyStats()
+
+    if (statsResult.status === 'fulfilled' && statsResult.value.data) {
+      const projects = statsResult.value.data as ProjectWithStats[]
+      // Calculate stats from projects
+      stats = {
+        total_projects_count: projects.length,
+        active_projects_count: projects.filter(p => !p.is_completed).length,
+        total_budget_sum: projects.reduce((sum, p) => sum + (p.total_budget || 0), 0),
+        total_received_sum: projects.reduce((sum, p) => sum + (p.total_received || 0), 0),
+        total_remaining_sum: projects.reduce((sum, p) => sum + (p.remaining_amount || 0), 0),
+        overdue_installments_count: projects.reduce((sum, p) => sum + (p.overdue_installments_count || 0), 0),
+      }
     }
-    
-    // Extract successful results, using empty arrays as fallbacks
-    const stats = statsResult.status === 'fulfilled' 
-      ? statsResult.value.data as DashboardStats 
-      : getEmptyStats()
     
     const recentProjects = recentProjectsResult.status === 'fulfilled' 
       ? (recentProjectsResult.value.data as ProjectWithStats[] || [])
@@ -128,18 +145,34 @@ export async function getDashboardData(): Promise<DashboardOverview> {
  */
 export async function getDashboardStats(): Promise<DashboardStats> {
   return withErrorHandling(async () => {
-    const supabase = createClient()
-    
+    const supabase = await createClient()
+
+    // Get current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      throw new Error('ავტორიზაცია საჭიროა')
+    }
+
     const { data, error } = await supabase
-      .from('dashboard_stats')
+      .from('project_summary')
       .select('*')
-      .single()
-    
+      .eq('user_id', user.id)
+
     if (error) {
       handleSupabaseError(error, 'სტატისტიკის ჩატვირთვა ვერ მოხერხდა')
     }
-    
-    return data as DashboardStats
+
+    const projects = data as ProjectWithStats[]
+
+    return {
+      total_projects_count: projects.length,
+      active_projects_count: projects.filter(p => !p.is_completed).length,
+      total_budget_sum: projects.reduce((sum, p) => sum + (p.total_budget || 0), 0),
+      total_received_sum: projects.reduce((sum, p) => sum + (p.total_received || 0), 0),
+      total_remaining_sum: projects.reduce((sum, p) => sum + (p.remaining_amount || 0), 0),
+      overdue_installments_count: projects.reduce((sum, p) => sum + (p.overdue_installments_count || 0), 0),
+    }
   }, 'სტატისტიკის ჩატვირთვა ვერ მოხერხდა')
 }
 
@@ -154,17 +187,25 @@ export async function getDashboardStats(): Promise<DashboardStats> {
  */
 export async function getMonthlyPerformance(months = 12) {
   return withErrorHandling(async () => {
-    const supabase = createClient()
-    
+    const supabase = await createClient()
+
+    // Get current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      throw new Error('ავტორიზაცია საჭიროა')
+    }
+
     // Calculate date range
     const endDate = new Date()
     const startDate = new Date()
     startDate.setMonth(endDate.getMonth() - months)
-    
+
     // Get monthly transaction data
     const { data: transactions, error: transactionsError } = await supabase
       .from('transactions')
-      .select('transaction_date, amount')
+      .select('transaction_date, amount, project:projects!inner(user_id)')
+      .eq('project.user_id', user.id)
       .gte('transaction_date', startDate.toISOString().split('T')[0])
       .lte('transaction_date', endDate.toISOString().split('T')[0])
       .order('transaction_date')
@@ -206,15 +247,23 @@ export async function getMonthlyPerformance(months = 12) {
  */
 export async function getProjectCompletionTrends(months = 6) {
   return withErrorHandling(async () => {
-    const supabase = createClient()
-    
+    const supabase = await createClient()
+
+    // Get current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      throw new Error('ავტორიზაცია საჭიროა')
+    }
+
     const endDate = new Date()
     const startDate = new Date()
     startDate.setMonth(endDate.getMonth() - months)
-    
+
     const { data: projects, error } = await supabase
       .from('project_summary')
       .select('created_at, updated_at, is_completed')
+      .eq('user_id', user.id)
       .gte('created_at', startDate.toISOString())
     
     if (error) {
@@ -260,23 +309,32 @@ export async function getProjectCompletionTrends(months = 6) {
  */
 export async function getFinancialSummary(startDate: string, endDate: string) {
   return withErrorHandling(async () => {
-    const supabase = createClient()
-    
+    const supabase = await createClient()
+
+    // Get current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      throw new Error('ავტორიზაცია საჭიროა')
+    }
+
     // Get transactions in date range
     const { data: transactions, error: transactionsError } = await supabase
       .from('transactions')
-      .select('amount, transaction_date, project:projects(payment_type)')
+      .select('amount, transaction_date, project:projects!inner(payment_type, user_id)')
+      .eq('project.user_id', user.id)
       .gte('transaction_date', startDate)
       .lte('transaction_date', endDate)
-    
+
     if (transactionsError) {
       handleSupabaseError(transactionsError, 'ფინანსური მონაცემების ჩატვირთვა ვერ მოხერხდა')
     }
-    
+
     // Get projects created in date range
     const { data: newProjects, error: projectsError } = await supabase
       .from('projects')
       .select('total_budget, payment_type')
+      .eq('user_id', user.id)
       .gte('created_at', startDate)
       .lte('created_at', endDate)
     
@@ -323,12 +381,19 @@ export async function getFinancialSummary(startDate: string, endDate: string) {
  */
 export async function getCashFlowProjection(days = 90) {
   return withErrorHandling(async () => {
-    const supabase = createClient()
-    
+    const supabase = await createClient()
+
+    // Get current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      throw new Error('ავტორიზაცია საჭიროა')
+    }
+
     const today = new Date()
     const endDate = new Date()
     endDate.setDate(today.getDate() + days)
-    
+
     // Get upcoming installments
     const { data: installments, error } = await supabase
       .from('installment_summary')
@@ -337,8 +402,9 @@ export async function getCashFlowProjection(days = 90) {
         amount,
         remaining_amount,
         is_fully_paid,
-        project:projects(title)
+        project:projects!inner(title, user_id)
       `)
+      .eq('project.user_id', user.id)
       .gte('due_date', today.toISOString().split('T')[0])
       .lte('due_date', endDate.toISOString().split('T')[0])
       .order('due_date')
@@ -407,8 +473,15 @@ export async function getCashFlowProjection(days = 90) {
  */
 export async function getDashboardAlerts() {
   return withErrorHandling(async () => {
-    const supabase = createClient()
-    
+    const supabase = await createClient()
+
+    // Get current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      throw new Error('ავტორიზაცია საჭიროა')
+    }
+
     const alerts: Array<{
       id: string
       type: 'error' | 'warning' | 'info'
@@ -416,11 +489,12 @@ export async function getDashboardAlerts() {
       message: string
       action?: { label: string; href: string }
     }> = []
-    
+
     // Check for overdue installments
     const { data: overdueInstallments } = await supabase
       .from('installment_summary')
-      .select('project:projects(title), due_date')
+      .select('project:projects!inner(title, user_id), due_date')
+      .eq('project.user_id', user.id)
       .eq('is_overdue', true)
       .limit(5)
     
@@ -437,10 +511,11 @@ export async function getDashboardAlerts() {
     // Check for installments due soon (next 3 days)
     const threeDaysFromNow = new Date()
     threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3)
-    
+
     const { data: dueSoonInstallments } = await supabase
       .from('installment_summary')
-      .select('project:projects(title)')
+      .select('project:projects!inner(title, user_id)')
+      .eq('project.user_id', user.id)
       .eq('is_paid', false)
       .gte('due_date', new Date().toISOString().split('T')[0])
       .lte('due_date', threeDaysFromNow.toISOString().split('T')[0])
@@ -502,19 +577,5 @@ function getEmptyStats(): DashboardStats {
  * @returns Refreshed dashboard stats
  */
 export async function refreshDashboardStats(): Promise<DashboardStats> {
-  return withErrorHandling(async () => {
-    const supabase = createClient()
-    
-    // Force refresh by using a small random parameter
-    const { data, error } = await supabase
-      .from('dashboard_stats')
-      .select('*')
-      .single()
-    
-    if (error) {
-      handleSupabaseError(error, 'სტატისტიკის განახლება ვერ მოხერხდა')
-    }
-    
-    return data as DashboardStats
-  }, 'სტატისტიკის განახლება ვერ მოხერხდა')
+  return getDashboardStats()
 }

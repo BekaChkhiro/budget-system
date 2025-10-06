@@ -47,12 +47,12 @@ export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>ახალი პროექტის შექმნა</DialogTitle>
         </DialogHeader>
         <div className="mt-4">
-          <ProjectForm 
+          <ProjectForm
             onSubmit={handleSubmit}
             submitLabel="შექმნა"
             isSubmitting={isSubmitting}

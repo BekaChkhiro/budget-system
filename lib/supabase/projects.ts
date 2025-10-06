@@ -170,17 +170,25 @@ export async function getProjectById(id: string): Promise<ProjectWithStats> {
 export async function projectExists(id: string): Promise<boolean> {
   return withErrorHandling(async () => {
     const supabase = createClient()
-    
+
+    // Get current user to filter by user_id
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      return false
+    }
+
     const { data, error } = await supabase
       .from('projects')
       .select('id')
       .eq('id', id)
+      .eq('user_id', user.id)
       .single()
-    
+
     if (error && error.code !== 'PGRST116') {
       handleSupabaseError(error)
     }
-    
+
     return !!data
   }, 'პროექტის შემოწმება ვერ მოხერხდა')
 }
@@ -282,24 +290,31 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
 export async function updateProject(id: string, input: UpdateProjectInput): Promise<Project> {
   return withErrorHandling(async () => {
     validateRequired({ id }, ['id'])
-    
+
+    const supabase = createClient()
+
+    // Get current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      throw new Error('ავტორიზაცია საჭიროა')
+    }
+
     // Check if project exists
     const exists = await projectExists(id)
     if (!exists) {
       handleBusinessError('RESOURCE_NOT_FOUND', 'პროექტი ვერ მოიძებნა')
     }
-    
+
     // Validate input if provided
     if (input.title !== undefined && input.title.length < 3) {
       handleBusinessError('INVALID_INPUT', 'პროექტის სახელი მინიმუმ 3 სიმბოლო უნდა იყოს')
     }
-    
+
     if (input.total_budget !== undefined) {
       validatePositiveNumber(input.total_budget, 'ბიუჯეტი')
     }
-    
-    const supabase = createClient()
-    
+
     // Check if project has transactions before allowing budget change
     if (input.total_budget !== undefined) {
       const { data: transactions } = await supabase
@@ -307,30 +322,31 @@ export async function updateProject(id: string, input: UpdateProjectInput): Prom
         .select('id')
         .eq('project_id', id)
         .limit(1)
-      
+
       if (transactions && transactions.length > 0) {
         handleBusinessError('PROJECT_HAS_TRANSACTIONS', 'ტრანზაქციების არსებობისას ბიუჯეტის შეცვლა შეუძლებელია')
       }
     }
-    
+
     const updateData: Record<string, unknown> = {}
-    
+
     if (input.title !== undefined) {
       updateData.title = input.title.trim()
     }
-    
+
     if (input.total_budget !== undefined) {
       updateData.total_budget = input.total_budget
     }
-    
+
     if (input.payment_type !== undefined) {
       updateData.payment_type = input.payment_type
     }
-    
+
     const { data: project, error } = await supabase
       .from('projects')
       .update(updateData)
       .eq('id', id)
+      .eq('user_id', user.id)
       .select()
       .single()
     
@@ -349,20 +365,28 @@ export async function updateProject(id: string, input: UpdateProjectInput): Prom
 export async function deleteProject(id: string): Promise<void> {
   return withErrorHandling(async () => {
     validateRequired({ id }, ['id'])
-    
+
     const supabase = createClient()
-    
+
+    // Get current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      throw new Error('ავტორიზაცია საჭიროა')
+    }
+
     // Check if project exists
     const exists = await projectExists(id)
     if (!exists) {
       handleBusinessError('RESOURCE_NOT_FOUND', 'პროექტი ვერ მოიძებნა')
     }
-    
+
     // Delete project (cascade will handle related data)
     const { error } = await supabase
       .from('projects')
       .delete()
       .eq('id', id)
+      .eq('user_id', user.id)
     
     if (error) {
       handleSupabaseError(error, 'პროექტის წაშლა ვერ მოხერხდა')

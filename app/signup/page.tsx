@@ -131,32 +131,6 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
                 </Link>
               </p>
             </div>
-
-            {/* Demo notice */}
-            <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-              <p className="text-sm text-blue-800">
-                <strong>დემო რეჟიმი:</strong> ეს არის დემო ვერსია. რეგისტრაცია ჯერ არ არის სრულად კონფიგურირებული.
-              </p>
-              <Link href="/">
-                <Button variant="outline" size="sm" className="mt-2 w-full">
-                  გაგრძელება დემო რეჟიმში
-                </Button>
-              </Link>
-            </div>
-
-            {/* Terms and Privacy */}
-            <div className="text-center">
-              <p className="text-xs text-gray-500">
-                რეგისტრაციით თქვენ ეთანხმებით ჩვენს{' '}
-                <Link href="/terms" className="underline hover:text-gray-700">
-                  წესებსა
-                </Link>{' '}
-                და{' '}
-                <Link href="/privacy" className="underline hover:text-gray-700">
-                  კონფიდენციალურობის პოლიტიკას
-                </Link>
-              </p>
-            </div>
           </CardContent>
         </Card>
       </div>

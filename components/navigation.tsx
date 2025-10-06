@@ -4,11 +4,13 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { logout } from "@/app/auth/actions"
 
 const navItems = [
   { href: "/", label: "მთავარი" },
   { href: "/projects", label: "პროექტები" },
   { href: "/transactions", label: "ტრანზაქციები" },
+  { href: "/team", label: "გუნდი" },
 ]
 
 export function Navigation() {
@@ -35,6 +37,7 @@ export function Navigation() {
                       ? "border-primary text-primary"
                       : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
                   )}
+                  suppressHydrationWarning
                 >
                   {item.label}
                 </Link>
@@ -42,9 +45,11 @@ export function Navigation() {
             </div>
           </div>
           <div className="flex items-center space-x-4">
-            <Button variant="outline" size="sm">
-              Log Out
-            </Button>
+            <form action={logout}>
+              <Button variant="outline" size="sm" type="submit">
+                გასვლა
+              </Button>
+            </form>
           </div>
         </div>
       </div>

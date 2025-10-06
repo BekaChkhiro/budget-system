@@ -28,6 +28,7 @@ export interface Database {
           title: string
           total_budget: number
           payment_type: 'single' | 'installment'
+          user_id: string
           created_at: string
           updated_at: string
         }
@@ -36,6 +37,7 @@ export interface Database {
           title: string
           total_budget: number
           payment_type: 'single' | 'installment'
+          user_id: string
           created_at?: string
           updated_at?: string
         }
@@ -44,10 +46,18 @@ export interface Database {
           title?: string
           total_budget?: number
           payment_type?: 'single' | 'installment'
+          user_id?: string
           created_at?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "projects_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       payment_installments: {
         Row: {

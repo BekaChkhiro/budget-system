@@ -1,19 +1,18 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useForm, useFieldArray } from 'react-hook-form'
+import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { projectFormSchema } from '@/lib/validations'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { Calendar } from '@/components/ui/calendar'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Trash2, Plus, CalendarIcon, AlertCircle, CheckCircle } from 'lucide-react'
-import { formatCurrency, formatDateShort } from '@/lib/utils/format'
+import { Trash2, Plus, AlertCircle, CheckCircle, Users } from 'lucide-react'
+import { formatCurrency } from '@/lib/utils/format'
 import { cn } from '@/lib/utils'
+import { TeamMemberMultiSelect } from './team-member-multi-select'
 
 interface ProjectFormProps {
   onSubmit: (data: any) => Promise<void>
@@ -36,6 +35,7 @@ export function ProjectForm({
       title: '',
       total_budget: 0,
       payment_type: 'single',
+      team_member_ids: [],
       installments: [],
       ...defaultValues
     }
@@ -64,10 +64,30 @@ export function ProjectForm({
   const isValidBudget = watchPaymentType === 'single' || Math.abs(difference) < 0.01
   const hasInstallments = watchPaymentType === 'installment' && fields.length > 0
 
+  // Debug logs
+  useEffect(() => {
+    console.log('=== Form State Debug ===')
+    console.log('Payment Type:', watchPaymentType)
+    console.log('Total Budget:', totalBudget)
+    console.log('Installments:', watchInstallments)
+    console.log('Installments Sum:', installmentsSum)
+    console.log('Difference:', difference)
+    console.log('Has Installments:', hasInstallments)
+    console.log('Is Valid Budget:', isValidBudget)
+    console.log('Fields count:', fields.length)
+  }, [watchPaymentType, totalBudget, watchInstallments, installmentsSum, difference, hasInstallments, isValidBudget, fields.length])
+
   const handleSubmit = async (data: any) => {
+    console.log('=== Form Submit Started ===')
+    console.log('Form data:', data)
+    console.log('Form errors:', form.formState.errors)
+    console.log('Is valid:', form.formState.isValid)
+
     try {
       await onSubmit(data)
+      console.log('=== Form Submit Success ===')
     } catch (error) {
+      console.error('=== Form Submit Error ===')
       console.error('Form submission error:', error)
     }
   }
@@ -128,6 +148,28 @@ export function ProjectForm({
         )}
       </div>
 
+      {/* Team Members */}
+      <div className="space-y-2">
+        <Label className="text-sm font-medium flex items-center gap-2">
+          <Users className="h-4 w-4" />
+          გუნდის წევრები
+        </Label>
+        <Controller
+          name="team_member_ids"
+          control={form.control}
+          render={({ field }) => (
+            <TeamMemberMultiSelect
+              value={field.value || []}
+              onChange={field.onChange}
+              disabled={isSubmitting}
+            />
+          )}
+        />
+        <p className="text-xs text-muted-foreground">
+          აირჩიეთ გუნდის წევრები, რომლებიც იმუშავებენ ამ პროექტზე
+        </p>
+      </div>
+
       {/* Payment Type */}
       <div className="space-y-3">
         <Label className="text-sm font-medium">გადახდის ტიპი *</Label>
@@ -166,7 +208,14 @@ export function ProjectForm({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => append({ amount: '', due_date: '' })}
+                onClick={() => {
+                  const tomorrow = new Date()
+                  tomorrow.setDate(tomorrow.getDate() + 1)
+                  append({
+                    amount: 0,
+                    due_date: tomorrow.toISOString().split('T')[0]
+                  })
+                }}
                 disabled={isSubmitting}
               >
                 <Plus className="h-4 w-4 mr-1" />
@@ -205,39 +254,12 @@ export function ProjectForm({
                   <Label className="text-xs text-muted-foreground">
                     გადახდის თარიღი
                   </Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button 
-                        variant="outline" 
-                        className={cn(
-                          "w-full justify-start text-left font-normal mt-1",
-                          !form.watch(`installments.${index}.due_date`) && "text-muted-foreground"
-                        )}
-                        type="button"
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {form.watch(`installments.${index}.due_date`)
-                          ? formatDateShort(form.watch(`installments.${index}.due_date`))
-                          : 'აირჩიეთ თარიღი'
-                        }
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={form.watch(`installments.${index}.due_date`) ? 
-                          new Date(form.watch(`installments.${index}.due_date`)) : undefined}
-                        onSelect={(date) => {
-                          if (date) {
-                            form.setValue(`installments.${index}.due_date`, 
-                              date.toISOString().split('T')[0])
-                          }
-                        }}
-                        disabled={(date) => date < new Date()}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
+                  <Input
+                    type="date"
+                    min={new Date().toISOString().split('T')[0]}
+                    {...form.register(`installments.${index}.due_date`)}
+                    className="mt-1"
+                  />
                 </div>
                 <div className="col-span-2">
                   <Button
@@ -295,9 +317,9 @@ export function ProjectForm({
 
       {/* Submit Button */}
       <div className="flex justify-end space-x-3 pt-4 border-t">
-        <Button 
-          type="submit" 
-          disabled={isSubmitting || (watchPaymentType === 'installment' && !isValidBudget)}
+        <Button
+          type="submit"
+          disabled={isSubmitting || (watchPaymentType === 'installment' && (!hasInstallments || !isValidBudget))}
           className="min-w-[120px]"
         >
           {isSubmitting ? (
