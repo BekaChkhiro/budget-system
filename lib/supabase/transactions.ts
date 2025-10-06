@@ -539,39 +539,47 @@ export async function getTransactionStats(startDate: string, endDate: string) {
   return withErrorHandling(async () => {
     validateDate(startDate, 'საწყისი თარიღი')
     validateDate(endDate, 'საბოლოო თარიღი')
-    
+
     const supabase = createClient()
-    
+
+    // Get current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError || !user) {
+      throw new Error('ავტორიზაცია საჭიროა')
+    }
+
+    // Get all user's transactions
+    const { data: allTransactions, error: allError } = await supabase
+      .from('transactions')
+      .select('amount, transaction_date, project:projects!inner(user_id)')
+      .eq('project.user_id', user.id)
+
+    if (allError) {
+      handleSupabaseError(allError, 'სტატისტიკის ჩატვირთვა ვერ მოხერხდა')
+    }
+
+    // Get transactions for the specified period
     const { data, error } = await supabase
       .from('transactions')
-      .select('amount, transaction_date')
+      .select('amount, transaction_date, project:projects!inner(user_id)')
+      .eq('project.user_id', user.id)
       .gte('transaction_date', startDate)
       .lte('transaction_date', endDate)
-    
+
     if (error) {
       handleSupabaseError(error, 'სტატისტიკის ჩატვირთვა ვერ მოხერხდა')
     }
-    
-    const totalAmount = data.reduce((sum, t) => sum + t.amount, 0)
-    const totalCount = data.length
-    const averageAmount = totalCount > 0 ? totalAmount / totalCount : 0
-    
-    // Group by date
-    const dailyStats = data.reduce((acc, transaction) => {
-      const date = transaction.transaction_date
-      if (!acc[date]) {
-        acc[date] = { amount: 0, count: 0 }
-      }
-      acc[date].amount += transaction.amount
-      acc[date].count += 1
-      return acc
-    }, {} as Record<string, { amount: number; count: number }>)
-    
+
+    const totalPaid = allTransactions.reduce((sum, t) => sum + t.amount, 0)
+    const thisMonthPaid = data.reduce((sum, t) => sum + t.amount, 0)
+    const transactionCount = allTransactions.length
+    const averageTransaction = transactionCount > 0 ? totalPaid / transactionCount : 0
+
     return {
-      total_amount: totalAmount,
-      total_count: totalCount,
-      average_amount: averageAmount,
-      daily_stats: dailyStats,
+      totalPaid,
+      thisMonthPaid,
+      transactionCount,
+      averageTransaction,
     }
   }, 'სტატისტიკის ჩატვირთვა ვერ მოხერხდა')
 }

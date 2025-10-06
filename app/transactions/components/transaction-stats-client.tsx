@@ -55,7 +55,7 @@ export function TransactionStatsClient() {
     },
     {
       title: 'ტრანზაქციების რაოდენობა',
-      value: transactionCount.toString(),
+      value: (transactionCount ?? 0).toString(),
       change: 'სულ ტრანზაქციები',
       changeType: 'neutral' as const,
       icon: DollarSign,

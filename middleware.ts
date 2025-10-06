@@ -149,15 +149,22 @@ export async function middleware(request: NextRequest) {
     return secureResponse
   } catch (error) {
     console.error('Middleware error:', error)
-    
-    // Return a generic error response
+
+    // For non-API routes, redirect to login on error
+    if (!pathname.startsWith('/api/')) {
+      const redirectUrl = new URL('/login', request.url)
+      redirectUrl.searchParams.set('error', 'authentication_failed')
+      return NextResponse.redirect(redirectUrl)
+    }
+
+    // Return a generic error response for API routes
     return new NextResponse(
-      JSON.stringify({ 
+      JSON.stringify({
         error: 'Internal Server Error',
         message: 'An unexpected error occurred',
         requestId: request.headers.get('x-request-id') || 'unknown'
       }),
-      { 
+      {
         status: 500,
         headers: {
           'Content-Type': 'application/json',

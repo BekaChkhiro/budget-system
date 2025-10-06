@@ -83,7 +83,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
   }
 
   return (
-    <div className="container py-8">
+    <div className="container mx-auto p-4 md:p-6 space-y-6">
       {/* Back Button */}
       <Link href="/projects">
         <Button variant="ghost" size="sm" className="mb-4">
