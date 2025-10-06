@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Navigation } from "@/components/navigation";
@@ -155,7 +156,9 @@ export default function RootLayout({
             </main>
           </div>
           <Toaster position="top-right" richColors closeButton />
-          <Analytics />
+          <Suspense fallback={null}>
+            <Analytics />
+          </Suspense>
         </Providers>
       </body>
     </html>
